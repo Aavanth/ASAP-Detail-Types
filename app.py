@@ -201,13 +201,13 @@ if uploaded_file:
     st.subheader("🎯 Risk Dashboard")
 
     def color_flag(val):
-        if val > 0.02:
+        if val > 0.05:
             return "🔴 High Increase"
-        elif val > 0:
+        elif val > 0.02:
             return "🟠 Mild Increase"
-        elif val < -0.02:
+        elif val < -0.05:
             return "🟢 High Decrease"
-        elif val < 0:
+        elif val < -0.02:
             return "🟡 Mild Decrease"
         return "⚪ Neutral"
 
