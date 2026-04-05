@@ -13,14 +13,13 @@ st.title("📊 Detail Type Seasonality & Anomaly Detection")
 def safe_chi_square(a, b, c, d):
     table = np.array([[a, b], [c, d]])
 
-    # Skip invalid tables (zero row/column)
     if (table.sum(axis=0) == 0).any() or (table.sum(axis=1) == 0).any():
         return None
 
     try:
-        chi2, p, _, expected = chi2_contingency(table, correction=True)
+        chi2, p, _, _ = chi2_contingency(table, correction=True)
         return p
-    except ValueError:
+    except:
         return None
 
 
@@ -31,7 +30,6 @@ uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
     df.columns = df.columns.str.lower().str.strip()
 
     if 'detail type' not in df.columns or 'date of occurrence' not in df.columns:
@@ -48,7 +46,7 @@ if uploaded_file:
     pivot = df.groupby(['year','month','detail type']).size().reset_index(name='count')
 
     # -----------------------------
-    # SIDEBAR CONTROLS
+    # SIDEBAR
     # -----------------------------
     st.sidebar.header("Controls")
     selected_year = st.sidebar.selectbox("Year", sorted(df['year'].unique()))
@@ -57,7 +55,13 @@ if uploaded_file:
     current = pivot[(pivot['year']==selected_year) & (pivot['month']==selected_month)]
     prev_year = pivot[(pivot['year']==selected_year-1) & (pivot['month']==selected_month)]
 
-    df['year_month'] = df['date of occurrence'].dt.to_period('M')
+    # Last month
+    prev_month_period = pd.Period(f"{selected_year}-{selected_month:02d}") - 1
+    prev_month = pivot[
+        (pivot['year']==prev_month_period.year) &
+        (pivot['month']==prev_month_period.month)
+    ]
+
     selected_period = pd.Period(f"{selected_year}-{selected_month:02d}")
 
     # -----------------------------
@@ -83,10 +87,11 @@ if uploaded_file:
         b = prev_year[prev_year['detail type']==dt]['count'].sum()
         total_prev = prev_year['count'].sum()
 
+        last_month_count = prev_month[prev_month['detail type']==dt]['count'].sum()
+
         if total_current == 0 or total_prev == 0:
             continue
 
-        # Minimum threshold (reduces noise)
         if a < 5 and b < 5:
             continue
 
@@ -100,7 +105,6 @@ if uploaded_file:
         # YOY CHI-SQUARE
         # -----------------------------
         p_yoy = safe_chi_square(a, b, c, d)
-
         if p_yoy is None:
             continue
 
@@ -108,7 +112,7 @@ if uploaded_file:
         result_yoy = f"Significant {direction_yoy}" if p_yoy < 0.05 else "Not Significant"
 
         # -----------------------------
-        # 3-MONTH COMPARISON
+        # 3-MONTH
         # -----------------------------
         prev3_dt = prev_3[prev_3['detail type']==dt]['count'].sum()
         prev3_total = prev_3['count'].sum()
@@ -119,7 +123,6 @@ if uploaded_file:
         prev3_rate = prev3_dt / prev3_total
 
         p_3mo = safe_chi_square(a, prev3_dt, c, prev3_total - prev3_dt)
-
         if p_3mo is None:
             continue
 
@@ -127,16 +130,19 @@ if uploaded_file:
         result_3mo = f"Significant {direction_3mo}" if p_3mo < 0.05 else "Not Significant"
 
         # -----------------------------
-        # STORE RESULTS
+        # DIFFERENCES
+        # -----------------------------
+        diff_last_month = a - last_month_count
+        diff_yoy = a - b
+
+        # -----------------------------
+        # STORE
         # -----------------------------
         results.append({
             "Detail Type": dt,
             "Current Count": a,
-            "Prev Year Count": b,
-            "Prev 3mo Count": prev3_dt,
-            "Current Rate": current_rate,
-            "Prev Year Rate": prev_rate,
-            "Prev 3mo Rate": prev3_rate,
+            "Diff vs Last Month": diff_last_month,
+            "Diff vs Last Year": diff_yoy,
             "Effect YoY": current_rate - prev_rate,
             "Effect 3mo": current_rate - prev3_rate,
             "YoY Result": result_yoy,
@@ -145,15 +151,12 @@ if uploaded_file:
 
     results_df = pd.DataFrame(results)
 
-    # -----------------------------
-    # SAFETY CHECK
-    # -----------------------------
     if results_df.empty:
         st.warning("No valid statistical comparisons for this selection.")
         st.stop()
 
     # -----------------------------
-    # TOP 5 ANOMALIES (COUNTS ONLY)
+    # TOP 5 ANOMALIES
     # -----------------------------
     st.subheader("🏆 Top 5 Anomalies")
 
@@ -162,12 +165,22 @@ if uploaded_file:
     with col1:
         st.markdown("### 🔺 Largest Increases")
         top_inc = results_df.sort_values("Effect YoY", ascending=False).head(5)
-        st.dataframe(top_inc[["Detail Type", "Current Count"]])
+        st.dataframe(top_inc[[
+            "Detail Type",
+            "Current Count",
+            "Diff vs Last Month",
+            "Diff vs Last Year"
+        ]])
 
     with col2:
         st.markdown("### 🔻 Largest Decreases")
         top_dec = results_df.sort_values("Effect YoY", ascending=True).head(5)
-        st.dataframe(top_dec[["Detail Type", "Current Count"]])
+        st.dataframe(top_dec[[
+            "Detail Type",
+            "Current Count",
+            "Diff vs Last Month",
+            "Diff vs Last Year"
+        ]])
 
     # -----------------------------
     # ALERTS
@@ -185,27 +198,28 @@ if uploaded_file:
     st.dataframe(alerts.sort_values("Effect YoY", ascending=False))
 
     # -----------------------------
-    # RISK DASHBOARD
+    # RISK DASHBOARD (NO STYLER)
     # -----------------------------
     st.subheader("🎯 Risk Dashboard")
 
-    def color_effect(val):
+    def color_flag(val):
         if val > 0.02:
-            return "background-color: #ff9999"
+            return "🔴 High Increase"
         elif val > 0:
-            return "background-color: #ffe6e6"
+            return "🟠 Mild Increase"
         elif val < -0.02:
-            return "background-color: #99ff99"
+            return "🟢 High Decrease"
         elif val < 0:
-            return "background-color: #e6ffe6"
-        return ""
+            return "🟡 Mild Decrease"
+        return "⚪ Neutral"
 
-    styled_df = results_df.style.applymap(
-        color_effect,
-        subset=["Effect YoY", "Effect 3mo"]
+    results_df["YoY Signal"] = results_df["Effect YoY"].apply(color_flag)
+    results_df["3mo Signal"] = results_df["Effect 3mo"].apply(color_flag)
+
+    st.dataframe(
+        results_df.sort_values("Effect YoY", ascending=False),
+        use_container_width=True
     )
-
-    st.dataframe(styled_df)
 
     # -----------------------------
     # TREND CHART
