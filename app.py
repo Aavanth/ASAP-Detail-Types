@@ -226,14 +226,14 @@ signal_df = results_df[
 
 st.dataframe(signal_df, use_container_width=True)
 
-    # -----------------------------
-    # TREND CHART
-    # -----------------------------
-    st.subheader("📈 Trend Viewer")
+# -----------------------------
+# TREND CHART
+# -----------------------------
+st.subheader("📈 Trend Viewer")
 
-    selected_dt = st.selectbox("Select Detail Type", detail_types)
+selected_dt = st.selectbox("Select Detail Type", detail_types)
 
-    trend = pivot[pivot['detail type']==selected_dt].copy()
-    trend['date'] = pd.to_datetime(trend[['year','month']].assign(day=1))
+trend = pivot[pivot['detail type']==selected_dt].copy()
+trend['date'] = pd.to_datetime(trend[['year','month']].assign(day=1))
 
-    st.line_chart(trend.set_index('date')['count'])
+st.line_chart(trend.set_index('date')['count'])
