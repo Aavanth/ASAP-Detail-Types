@@ -101,9 +101,7 @@ if uploaded_file:
         current_rate = a / total_current
         prev_rate = b / total_prev
 
-        # -----------------------------
-        # YOY CHI-SQUARE
-        # -----------------------------
+        # YOY
         p_yoy = safe_chi_square(a, b, c, d)
         if p_yoy is None:
             continue
@@ -111,9 +109,7 @@ if uploaded_file:
         direction_yoy = "Increase" if current_rate > prev_rate else "Decrease"
         result_yoy = f"Significant {direction_yoy}" if p_yoy < 0.05 else "Not Significant"
 
-        # -----------------------------
         # 3-MONTH
-        # -----------------------------
         prev3_dt = prev_3[prev_3['detail type']==dt]['count'].sum()
         prev3_total = prev_3['count'].sum()
 
@@ -129,15 +125,10 @@ if uploaded_file:
         direction_3mo = "Increase" if current_rate > prev3_rate else "Decrease"
         result_3mo = f"Significant {direction_3mo}" if p_3mo < 0.05 else "Not Significant"
 
-        # -----------------------------
-        # DIFFERENCES
-        # -----------------------------
+        # Differences
         diff_last_month = a - last_month_count
         diff_yoy = a - b
 
-        # -----------------------------
-        # STORE
-        # -----------------------------
         results.append({
             "Detail Type": dt,
             "Current Count": a,
@@ -198,7 +189,7 @@ if uploaded_file:
     st.dataframe(alerts.sort_values("Effect YoY", ascending=False))
 
     # -----------------------------
-    # RISK DASHBOARD (NO STYLER)
+    # RISK DASHBOARD (SIGNALS ONLY)
     # -----------------------------
     st.subheader("🎯 Risk Dashboard")
 
@@ -216,10 +207,13 @@ if uploaded_file:
     results_df["YoY Signal"] = results_df["Effect YoY"].apply(color_flag)
     results_df["3mo Signal"] = results_df["Effect 3mo"].apply(color_flag)
 
-    st.dataframe(
-        results_df.sort_values("Effect YoY", ascending=False),
-        use_container_width=True
-    )
+    signal_df = results_df[[
+        "Detail Type",
+        "YoY Signal",
+        "3mo Signal"
+    ]]
+
+    st.dataframe(signal_df, use_container_width=True)
 
     # -----------------------------
     # TREND CHART
