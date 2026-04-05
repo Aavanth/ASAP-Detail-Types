@@ -214,13 +214,17 @@ if uploaded_file:
     results_df["YoY Signal"] = results_df["Effect YoY"].apply(color_flag)
     results_df["3mo Signal"] = results_df["Effect 3mo"].apply(color_flag)
 
-    signal_df = results_df[[
-        "Detail Type",
-        "YoY Signal",
-        "3mo Signal"
-    ]]
+# 🔥 FILTER OUT NEUTRAL ROWS
+signal_df = results_df[
+    (results_df["YoY Signal"] != "⚪ Neutral") |
+    (results_df["3mo Signal"] != "⚪ Neutral")
+][[
+    "Detail Type",
+    "YoY Signal",
+    "3mo Signal"
+]]
 
-    st.dataframe(signal_df, use_container_width=True)
+st.dataframe(signal_df, use_container_width=True)
 
     # -----------------------------
     # TREND CHART
