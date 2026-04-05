@@ -174,9 +174,11 @@ if uploaded_file:
         ]])
 
     # -----------------------------
-    # ALERTS
+    # ALERTS WITH SEARCH
     # -----------------------------
     st.subheader("🚨 Significant Alerts")
+
+    search_term = st.text_input("🔍 Search Detail Type")
 
     alerts = results_df[
         (results_df["YoY Result"].str.contains("Significant")) &
@@ -185,6 +187,11 @@ if uploaded_file:
             (abs(results_df["Effect 3mo"]) > 0.02)
         )
     ]
+
+    if search_term:
+        alerts = alerts[
+            alerts["Detail Type"].str.contains(search_term, case=False, na=False)
+        ]
 
     st.dataframe(alerts.sort_values("Effect YoY", ascending=False))
 
