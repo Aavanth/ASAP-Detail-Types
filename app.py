@@ -8,7 +8,7 @@ st.set_page_config(page_title="Detail Type Anomaly Detection", layout="wide")
 st.title("📊 Detail Type Seasonality & Anomaly Detection")
 
 # -----------------------------
-# ✅ SAFE CHI-SQUARE FUNCTION
+# SAFE CHI-SQUARE FUNCTION
 # -----------------------------
 def safe_chi_square(a, b, c, d):
     table = np.array([[a, b], [c, d]])
@@ -19,13 +19,7 @@ def safe_chi_square(a, b, c, d):
 
     try:
         chi2, p, _, expected = chi2_contingency(table, correction=True)
-
-        # Optional: flag weak tests (expected < 5)
-        if (expected < 5).any():
-            return p  # still usable, just weaker
-
         return p
-
     except ValueError:
         return None
 
@@ -66,9 +60,12 @@ if uploaded_file:
     df['year_month'] = df['date of occurrence'].dt.to_period('M')
     selected_period = pd.Period(f"{selected_year}-{selected_month:02d}")
 
-    prev_6 = pivot[pivot.apply(
+    # -----------------------------
+    # 3-MONTH WINDOW
+    # -----------------------------
+    prev_3 = pivot[pivot.apply(
         lambda row: pd.Period(f"{row['year']}-{row['month']:02d}") in 
-        pd.period_range(selected_period-6, selected_period-1, freq='M'),
+        pd.period_range(selected_period-3, selected_period-1, freq='M'),
         axis=1
     )]
 
@@ -86,7 +83,6 @@ if uploaded_file:
         b = prev_year[prev_year['detail type']==dt]['count'].sum()
         total_prev = prev_year['count'].sum()
 
-        # Skip if no data
         if total_current == 0 or total_prev == 0:
             continue
 
@@ -112,23 +108,23 @@ if uploaded_file:
         result_yoy = f"Significant {direction_yoy}" if p_yoy < 0.05 else "Not Significant"
 
         # -----------------------------
-        # 6-MONTH COMPARISON
+        # 3-MONTH COMPARISON
         # -----------------------------
-        prev6_dt = prev_6[prev_6['detail type']==dt]['count'].sum()
-        prev6_total = prev_6['count'].sum()
+        prev3_dt = prev_3[prev_3['detail type']==dt]['count'].sum()
+        prev3_total = prev_3['count'].sum()
 
-        if prev6_total == 0:
+        if prev3_total == 0:
             continue
 
-        prev6_rate = prev6_dt / prev6_total
+        prev3_rate = prev3_dt / prev3_total
 
-        p_6mo = safe_chi_square(a, prev6_dt, c, prev6_total - prev6_dt)
+        p_3mo = safe_chi_square(a, prev3_dt, c, prev3_total - prev3_dt)
 
-        if p_6mo is None:
+        if p_3mo is None:
             continue
 
-        direction_6mo = "Increase" if current_rate > prev6_rate else "Decrease"
-        result_6mo = f"Significant {direction_6mo}" if p_6mo < 0.05 else "Not Significant"
+        direction_3mo = "Increase" if current_rate > prev3_rate else "Decrease"
+        result_3mo = f"Significant {direction_3mo}" if p_3mo < 0.05 else "Not Significant"
 
         # -----------------------------
         # STORE RESULTS
@@ -137,14 +133,14 @@ if uploaded_file:
             "Detail Type": dt,
             "Current Count": a,
             "Prev Year Count": b,
-            "Prev 6mo Count": prev6_dt,
+            "Prev 3mo Count": prev3_dt,
             "Current Rate": current_rate,
             "Prev Year Rate": prev_rate,
-            "Prev 6mo Rate": prev6_rate,
+            "Prev 3mo Rate": prev3_rate,
             "Effect YoY": current_rate - prev_rate,
-            "Effect 6mo": current_rate - prev6_rate,
+            "Effect 3mo": current_rate - prev3_rate,
             "YoY Result": result_yoy,
-            "6mo Result": result_6mo
+            "3mo Result": result_3mo
         })
 
     results_df = pd.DataFrame(results)
@@ -157,7 +153,7 @@ if uploaded_file:
         st.stop()
 
     # -----------------------------
-    # TOP 5 ANOMALIES
+    # TOP 5 ANOMALIES (COUNTS ONLY)
     # -----------------------------
     st.subheader("🏆 Top 5 Anomalies")
 
@@ -165,11 +161,13 @@ if uploaded_file:
 
     with col1:
         st.markdown("### 🔺 Largest Increases")
-        st.dataframe(results_df.sort_values("Effect YoY", ascending=False).head(5))
+        top_inc = results_df.sort_values("Effect YoY", ascending=False).head(5)
+        st.dataframe(top_inc[["Detail Type", "Current Count"]])
 
     with col2:
         st.markdown("### 🔻 Largest Decreases")
-        st.dataframe(results_df.sort_values("Effect YoY", ascending=True).head(5))
+        top_dec = results_df.sort_values("Effect YoY", ascending=True).head(5)
+        st.dataframe(top_dec[["Detail Type", "Current Count"]])
 
     # -----------------------------
     # ALERTS
@@ -178,7 +176,10 @@ if uploaded_file:
 
     alerts = results_df[
         (results_df["YoY Result"].str.contains("Significant")) &
-        (abs(results_df["Effect YoY"]) > 0.02)
+        (
+            (abs(results_df["Effect YoY"]) > 0.02) |
+            (abs(results_df["Effect 3mo"]) > 0.02)
+        )
     ]
 
     st.dataframe(alerts.sort_values("Effect YoY", ascending=False))
@@ -201,7 +202,7 @@ if uploaded_file:
 
     styled_df = results_df.style.applymap(
         color_effect,
-        subset=["Effect YoY", "Effect 6mo"]
+        subset=["Effect YoY", "Effect 3mo"]
     )
 
     st.dataframe(styled_df)
